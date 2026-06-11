@@ -90,25 +90,30 @@ same contents share one blob regardless of their names.
 
 ---
 
-**Q5.** You delete `file1.txt` from your working directory.
-What happens to its blob in `.git/objects/`?
+**Q5.** After running `git hash-object --stdin -w` to create a blob,
+you run `ls -la` in the project folder and see no new files — only `.git/`.
+Yet `git cat-file --batch-all-objects --batch-check` shows the blob exists.
+What explains this?
 
-- A) The blob is automatically deleted when the file is deleted from disk
-- B) The blob remains — Git objects are never deleted automatically
-- C) The blob is immediately marked as orphaned and deleted on next gc
-- D) Git detects the deletion and restores the file automatically
+- A) git hash-object only creates a temporary blob — it disappears after the command exits
+- B) The blob is stored in .git/objects/ which is independent of the working directory
+- C) You need to run git add to make the blob visible
+- D) The blob will appear after the next git status
 
 <details>
 <summary>Answer</summary>
 
-**B** — Deleting a file from the working directory has no effect on
-`.git/objects/`. The blob remains until `git gc` runs after the reflog
-expiry period (90 days by default). Until then it is fully recoverable
-with `git cat-file -p <hash>`.
+**B** — Git's object database (`.git/objects/`) and the working directory
+are completely independent. `git hash-object -w` writes directly to the
+object database — it does not create any file in the working directory.
+Objects can exist in the database with no corresponding file on disk.
 
-Trap: C is partially correct in timing but wrong about "immediately" —
-the object becomes unreachable but is not queued or deleted until gc runs.
-D describes the opposite direction — recovery is manual, not automatic.
+This was demonstrated directly in the Demo 02 walkthrough: after creating
+two blobs from stdin and a temp file, `ls -la` inside `first-project/`
+showed only `.git/` — no other files.
+
+Trap: C is wrong — git add creates blobs from working directory files.
+Here the blob was created directly via plumbing — git add is not involved.
 
 </details>
 
