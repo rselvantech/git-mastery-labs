@@ -85,7 +85,20 @@ src/break-fix/
 3. You want to reproduce the SHA-1 hash Git produces for a file
    containing "hello\n". What exact command do you run?
 
-*Write your answers first. If you cannot answer, re-read Demo 03.*
+<details>
+<summary>Reveal answers — attempt from memory first</summary>
+
+**1.** A loose object is an individual zlib-compressed file stored at `.git/objects/<first2>/<remaining38>` — one file per object, created immediately on `git hash-object -w` or `git add`. A pack file combines many objects into a single binary file using delta compression. Pack files are created by `git gc` or during push/clone operations and are significantly more storage-efficient for repos with many similar object versions.
+
+**2.** No — not by default. `git gc` removes unreachable loose objects only after both expiry windows pass: `gc.pruneExpire` (default: 2 weeks) is the minimum age before a loose unreachable object is pruned, and `gc.reflogExpireUnreachable` (default: 30 days) protects unreachable reflog entries. Until both windows expire, any orphaned object is recoverable with `git cat-file -p <hash>`. Use `git gc --prune=now` to remove all unreachable objects immediately, bypassing the expiry windows.
+
+**3.**
+```bash
+printf "blob 6\0hello\n" | shasum
+```
+Git hashes the full object string — type SP length NUL content — not the raw content alone. "hello\n" is 6 bytes (5 characters + 1 newline). The length in the header must match the exact byte count.
+
+</details>
 
 ---
 
@@ -643,35 +656,15 @@ git write-tree             # create tree object from current index
 
 ## Key Takeaways
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  1. Nested directories = trees pointing to trees                     │
-│     Each directory is a separate tree object                         │
-│     Only changed directories get new tree objects — others reused    │
-│                                                                      │
-│  2. The index tracks FILES, not directories                          │
-│     Paths are stored flat: "src/utils/helpers.js"                   │
-│     Tree objects for directories are created at commit time          │
-│     by git write-tree (called internally by git commit)              │
-│                                                                      │
-│  3. git add creates blobs immediately                                 │
-│     Blob is written to .git/objects/ on every git add                │
-│     Index entry is updated with new hash, mtime, size               │
-│     Tree objects are NOT created until git commit                    │
-│                                                                      │
-│  4. A file can appear in both "staged" and "unstaged" sections       │
-│     Staged = the version in the index (from last git add)            │
-│     Unstaged = changes made to disk AFTER the last git add           │
-│     git diff --cached shows staged, git diff shows unstaged          │
-│                                                                      │
-│  5. git restore --staged vs git rm --cached                          │
-│     Both remove a file from the index without deleting from disk     │
-│     git restore --staged is the modern command (Git 2.23+)           │
-│     git rm --cached still works — same result                        │
-│                                                                      │
-└──────────────────────────────────────────────────────────────────────┘
-```
+1. **Every directory is a separate tree object — only changed directories get new hashes.** If `src/app.js` changes, Git creates a new blob for `app.js`, a new tree for `src/`, and a new root tree. All unchanged files and directories are reused by reference. This structural sharing keeps repository size manageable even with long histories.
+
+2. **The index tracks files, not directories.** `.git/index` stores flat paths like `src/utils/helpers.js` — not separate entries for `src/` and `src/utils/`. Directory tree objects are reconstructed from these paths at commit time by `git write-tree`. Knowing this explains why `git add src/` stages files, not a tree object.
+
+3. **`git add` creates blobs immediately — tree objects are created at commit time.** Every `git add` writes a blob to `.git/objects/` and updates the index entry with the new hash, mtime, and size. Running `git commit` then calls `git write-tree` to build tree objects from the index, followed by `git commit-tree` to wrap the root tree in a commit object.
+
+4. **A file can legitimately appear in both staged and unstaged sections simultaneously.** Staged = the version in the index from the last `git add`. Unstaged = changes made to disk after that `git add`. Use `git diff --cached` to see what will be committed and `git diff` to see what will not yet be committed.
+
+5. **`git restore --staged` and `git rm --cached` both unstage without deleting from disk.** The blob remains in `.git/objects/` and the file remains in the working directory. `git restore --staged` is the modern command (Git 2.23+); `git rm --cached` is the classic equivalent. Neither touches the blob or the working directory file.
 
 ### Quick reference — commands used in this demo
 
@@ -768,6 +761,22 @@ index correctly before calling `write-tree`.
 Fix: `git write-tree` (no flags needed)
 
 </details>
+
+---
+
+## Interview Prep
+
+**Q1. A colleague says "`git add` builds the directory tree Git stores." What is wrong with this and what is accurate?**
+`git add` does not create tree objects. It creates blob objects for each file's contents and updates `.git/index` with a flat list of file paths, hashes, permissions, and timestamps. Tree objects — the objects that represent directory hierarchy — are created at commit time by `git write-tree`, which is called internally by `git commit`. A developer who believes trees are created on `git add` will be confused by why `.git/objects/` does not show new tree entries after staging and why tree hashes change only on commit.
+
+**Q2. You run `git status` on a 50,000-file repository and it completes in under a second. How is that possible?**
+The index stores `mtime` and `ctime` for every tracked file alongside the blob hash. On `git status`, Git checks the file's current `mtime` and `ctime` against the values in the index. If they match, the file is assumed unchanged and Git skips rehashing entirely — no file content read required. Only files with changed timestamps are rehashed. This timestamp-based short-circuit is what makes `git status` fast even on very large repositories.
+
+**Q3. `git status` shows a file in both "Changes to be committed" and "Changes not staged for commit." A junior engineer says this is a Git bug. What is actually happening?**
+Both entries are correct and intentional. "Changes to be committed" shows the version in the index — the snapshot captured by the last `git add`. "Changes not staged" shows modifications made to the working directory file after that `git add`. Git tracks both independently. The next `git commit` will use the staged version. To include the newer changes, run `git add <file>` again to update the index entry, then commit.
+
+**Q4. What is the difference between `git diff`, `git diff --cached`, and `git diff HEAD`? When would you use each?**
+`git diff` compares the working directory against the index — it shows what you have changed but not yet staged. Use this to review edits before `git add`. `git diff --cached` (or `--staged`) compares the index against the last commit — it shows exactly what the next `git commit` will include. Use this to review your staged changes before committing. `git diff HEAD` compares the working directory against the last commit, combining both staged and unstaged changes into one view. Use this to see everything changed since the last commit regardless of staging state.
 
 ---
 
