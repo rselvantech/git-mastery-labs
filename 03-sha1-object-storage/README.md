@@ -64,7 +64,7 @@ collection.
 ├── 03-sha1-object-storage-anki.csv        # Anki flashcard deck
 ├── 03-sha1-object-storage-quiz.md         # standalone quiz
 └── src/
-    ├── first-project                      # -> ../../02-git-internals-object-model/src/first-project
+    ├── first-project                      # symlink to -> ../../02-git-internals-object-model/src/first-project
     └── break-fix/                         # isolated break-fix environment
 ```
 
@@ -830,34 +830,15 @@ git gc --prune=now                 # also remove unreachables immediately
 
 ## Key Takeaways
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  1. SHA-1 hash reproduction proves the four-field structure          │
-│     printf "blob N\0content\n" | shasum = git hash-object output     │
-│     No trust required — every hash is independently verifiable       │
-│                                                                      │
-│  2. Git objects are zlib-compressed binary files on disk             │
-│     cat produces garbage — use git cat-file -p or Python zlib        │
-│     Decompressed content is always: type SP length NUL content       │
-│                                                                      │
-│  3. SHA-1 collisions are not a practical concern                     │
-│     2^160 possible hashes. SHAttered attack requires crafted input   │
-│     and enormous resources. Git 2.13+ detects it. SHA-256 available. │
-│                                                                      │
-│  4. Loose objects → pack files over time                             │
-│     New objects start as individual loose files                      │
-│     git gc packs them with delta compression — significant savings   │
-│     Delta depth 0 = full copy; depth N = chain of N diffs           │
-│                                                                      │
-│  5. Unreachable objects persist until gc expiry windows pass         │
-│     gc.pruneExpire: 2 weeks (default)                                │
-│     gc.reflogExpireUnreachable: 30 days (default)                   │
-│     Until then: git cat-file -p <hash> recovers any orphaned object  │
-│     Reachability covered in Demo 10. Recovery workflows in Demo 27.  │
-│                                                                      │
-└──────────────────────────────────────────────────────────────────────┘
-```
+1. **SHA-1 hash reproduction is independently verifiable — no trust required.** `printf "blob N\0content\n" | shasum` produces the identical hash Git produces. The four-field header is not implementation detail — it is the specification, and you can prove it from scratch with only shell utilities.
+
+2. **Git objects are zlib-compressed binary on disk — `cat` produces garbage.** Use `git cat-file -p <hash>` to read any object, or Python's `zlib.decompress()` with `open(path, 'rb')` — binary mode is mandatory. Decompressed content is always: type SP length NUL content, confirming the structure from Demo 02.
+
+3. **SHA-1 collisions are not a practical concern for Git.** 2^160 possible values. The 2017 SHAttered attack required crafted inputs and enormous resources, not random files. Git 2.13+ detects the specific attack pattern. `git --hash=sha256` (available since Git 2.29) is the long-term solution, not an emergency fix.
+
+4. **New objects start loose; `git gc` packs them with delta compression.** Loose objects are one file per object. Pack files use delta compression — depth 0 = full copy, depth N = chain of N diffs. `git verify-pack -v <idx-file>` shows the depth of every packed object. Significant storage savings for repos with many similar file versions.
+
+5. **Unreachable objects persist until two expiry windows both pass.** `gc.pruneExpire` (default: 2 weeks) is the minimum age before a loose unreachable object is removed. `gc.reflogExpireUnreachable` (default: 30 days) protects unreachable reflog entries. Until then, any orphaned object is recoverable with `git cat-file -p <hash>`. Reachability is covered in depth in Demo 10. Full recovery workflows are covered in Demo 27.
 
 ### Quick reference — commands used in this demo
 
@@ -954,6 +935,22 @@ git verify-pack -v $IDX
 
 ---
 
+## Interview Prep
+
+**Q1. A junior engineer asks why `cat .git/objects/8a/b686...` shows garbage. How do you explain it and what is the right way to read it?**
+Git compresses every object with zlib (DEFLATE) before writing it to `.git/objects/`. `cat` reads the raw compressed bytes, which are binary and not human-readable. The right way to read any object is `git cat-file -p <hash>` — this decompresses and pretty-prints the content. For low-level investigation, `python3 -c "import zlib; print(zlib.decompress(open(path,'rb').read()))"` shows the raw decompressed bytes including the header. The `'rb'` (read binary) flag is mandatory — text mode corrupts the compressed stream.
+
+**Q2. After a `git rebase`, a colleague panics because the original commits "disappeared." What actually happened, and how long do you have to recover them?**
+Rebase creates new commit objects with new hashes and moves the branch pointer to them. The original commits become unreachable — no branch or tag points to them — but they remain in `.git/objects/` as loose or packed objects. They are recoverable by hash directly with `git cat-file -p <hash>` as long as `gc.pruneExpire` (default: 2 weeks) has not expired. The reflog also records the pre-rebase HEAD position, giving another recovery path. `git fsck --unreachable` lists all orphaned commits. Full recovery workflows are covered in Demo 27.
+
+**Q3. You run `git gc` on a repo and `git count-objects -vH` shows `count: 0, in-pack: 312`. A colleague says this means 312 objects were deleted. What is the correct interpretation?**
+No objects were deleted. `count: 0` means there are no loose object files remaining. `in-pack: 312` means all 312 objects were moved into a pack file with delta compression applied. The objects are still fully present and intact — `git cat-file -p <any-hash>` still works. `git gc` only removes loose objects that are already represented in pack files, and unreachable loose objects that have exceeded the `gc.pruneExpire` window. Everything reachable from a branch or tag is preserved.
+
+**Q4. What is delta compression in a Git pack file, and how do you see it?**
+Delta compression stores one full "base" object and represents similar objects as diffs (deltas) against it instead of full copies. A source file that changes by one line across 100 commits stores one full copy and 99 small diffs rather than 100 full copies. `git verify-pack -v <path-to-.idx>` shows the delta depth per object: depth 0 = full copy, depth N = a chain of N deltas to apply to reconstruct the content. Git chooses base objects automatically during packing — you never configure this manually.
+
+---
+
 ## What's Next
 
 **Demo 04 — Trees, Staging Area & Working Directory**
@@ -1012,7 +1009,7 @@ git verify-pack -v $IDX
 
 **03-sha1-object-storage-quiz.md:**
 
-```
+````
 # Quiz — Demo 03: SHA-1 & Object Storage Deep Dive
 
 > One correct answer per question unless stated otherwise.
@@ -1141,4 +1138,4 @@ Score guide:
 | 4/5 | Review the wrong answer, then proceed |
 | 3/5 | Re-read the relevant README section, retry quiz |
 | Below 3/5 | Re-read Demo 03 and redo the walkthrough before proceeding |
-```
+````

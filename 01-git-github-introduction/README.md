@@ -75,6 +75,21 @@ questions from memory before starting Demo 02. Write them down. No peeking.*
    What two config values are required and what is the exact command
    to set each one?
 
+<details>
+<summary>Reveal answers — attempt from memory first</summary>
+
+**1.** Git is a distributed version control system that runs locally on your machine and tracks the full history of your files with no internet required. GitHub is a cloud-based hosting service for Git repositories that adds collaboration features like pull requests, branch protection, and CI/CD pipelines.
+
+**2.** blob (file contents), tree (directory listing), commit (project snapshot), annotated tag (named release pointer).
+
+**3.** `user.name` and `user.email`. Commands:
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "your@email.com"
+```
+
+</details>
+
 ---
 
 ## Part 1 — The Problem Git Solves
@@ -688,33 +703,15 @@ the pager in scripts or when piping output to another command.
 
 ## Key Takeaways
 
-```
-┌────────────────────────────────────────────────────────────────────┐
-│                                                                    │
-│  1. Git ≠ GitHub                                                   │
-│     Git: local VCS software — works with no internet              │
-│     GitHub: cloud hosting service that uses Git                    │
-│                                                                    │
-│  2. Git is a content-addressed object database                      │
-│     Every object identified by SHA-1 hash of its contents          │
-│     Same content = same hash = one stored object (deduplication)   │
-│     Changing any byte changes the hash — tamper-evident            │
-│                                                                    │
-│  3. Three repository types: local, remote, bare                    │
-│     Local = your machine. Remote = shared (GitHub). Bare = server  │
-│                                                                    │
-│  4. Config scopes: system < global < local                         │
-│     Local always wins. Use global for identity, local to override  │
-│     per project (e.g. different email for work repos)              │
-│                                                                    │
-│  5. core.editor "code --wait" — the --wait flag is mandatory       │
-│     Without it Git continues before you finish writing             │
-│                                                                    │
-│  6. GitHub links commits by email — primary AND secondary emails   │
-│     Any email on your GitHub account links commits correctly        │
-│                                                                    │
-└────────────────────────────────────────────────────────────────────┘
-```
+1. **Git and GitHub are separate tools with different purposes.** Git is a local VCS that works with no internet — it was created in 2005 and GitHub did not exist until 2008. Treating them as the same thing leads to confusion about which errors come from Git and which come from GitHub.
+
+2. **Git is a content-addressed object database, not a file-diff tool.** Every object is identified by the SHA-1 hash of its contents — same content always produces the same hash, and the same object is never stored twice. This gives Git automatic deduplication, tamper-evident history, and fast lookups.
+
+3. **Config scope precedence is local > global > system — most specific always wins.** Use global for your identity and defaults; use local to override per repository (e.g. a work email for one project). Forgetting this causes commits to appear under the wrong identity on GitHub.
+
+4. **`core.editor "code --wait"` — the `--wait` flag is not optional.** Without it, Git continues immediately after launching VS Code, reads an empty message file, and creates an empty commit. Every Git editor integration requires a blocking flag equivalent to `--wait`.
+
+5. **GitHub links commits by email — primary and secondary emails both work.** If your commit author email does not match any email on your GitHub account, commits show as an unknown user. Add the email under GitHub Settings → Emails rather than changing your git config.
 
 ### Quick reference — commands used in this demo
 
@@ -813,6 +810,22 @@ This is why restoring your config after this scenario is important.
 
 ---
 
+## Interview Prep
+
+**Q1. A colleague says their commits show as "unknown user" on GitHub even though `git config --global user.name` and `user.email` are set. What is the most likely cause and how do you fix it?**
+The email in `git config` does not match any email associated with their GitHub account. GitHub links commits by comparing the commit author email against all emails on the account — primary and secondary. The fix is to add the local git email to GitHub under Settings → Emails, or to change `user.email` to one already on the account. Running `git config --global user.email` reveals the current value; running `git config --list --show-origin` shows which config file it comes from — useful when a local scope override is silently winning.
+
+**Q2. You have a personal email set globally and a work email needed for one project. How do you configure this without breaking commits in your personal repos?**
+Set the work email with local scope inside that project only: `git config --local user.email "you@company.com"`. This writes to `.git/config` inside the repo and overrides the global value for that repo only. All other repos continue using the global personal email. Verify with `git config user.email` from inside the project — it should show the work email — and from outside — it should show the personal email.
+
+**Q3. A developer sets `core.editor "code"` without `--wait` and runs `git commit`. What happens and why?**
+Git launches VS Code and immediately continues without waiting for the editor to close. It reads the temporary commit message file (`COMMIT_EDITMSG`) before the developer has written anything — the file is empty — and either creates an empty commit or aborts with an error about an empty commit message, depending on `commit.cleanup` config. Fix: `git config --global core.editor "code --wait"`. The `--wait` flag tells VS Code to hold the terminal process open until the tab is closed, signalling to Git that the message is ready.
+
+**Q4. Someone asks you to explain Git's config scope precedence in a production context — where does this actually matter?**
+In a shared build server or CI environment, a system-level config (`/etc/gitconfig`) may enforce policies like `core.autocrlf false` or a specific credential helper. A developer's global config overrides these for their user. A local repo config overrides the global. The precedence — local wins over global wins over system — means project-specific settings are always portable and cannot be overridden by machine-level config. A common production scenario: a company's CI runner has system-level identity config that is correctly overridden by the pipeline's local repo config for the deployment identity.
+
+---
+
 ## What's Next
 
 **Demo 02 — Git Internals: The Object Model**
@@ -870,7 +883,7 @@ This is why restoring your config after this scenario is important.
 
 **01-git-github-introduction-quiz.md:**
 
-```
+````
 # Quiz — Demo 01: What is Git & GitHub
 
 > One correct answer per question unless stated otherwise.
@@ -985,4 +998,4 @@ Score guide:
 | 4/5 | Review wrong answers, then proceed |
 | 3/5 | Re-read relevant README sections, retry quiz |
 | Below 3/5 | Re-read Demo 01 before proceeding |
-```
+````

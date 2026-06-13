@@ -93,8 +93,20 @@ No peeking at Demo 01.*
 3. You run `git commit` and get an error about missing identity.
    What two config values must you set and what is the exact command for each?
 
-*Write your answers first. If you cannot answer, re-read Demo 01 before
-continuing here.*
+<details>
+<summary>Reveal answers — attempt from memory first</summary>
+
+**1.** Git is a distributed version control system that runs locally and needs no internet to commit or read history. GitHub is a cloud hosting service for Git repositories that adds pull requests, branch protection, and CI/CD pipelines on top.
+
+**2.** blob (file contents), tree (directory listing), commit (project snapshot), annotated tag (named release pointer).
+
+**3.** `user.name` and `user.email`. Commands:
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "your@email.com"
+```
+
+</details>
 
 ---
 
@@ -1044,36 +1056,15 @@ git checkout-index -a        # staging area → working directory
 
 ## Key Takeaways
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  1. .git/ IS the repository                                          │
-│     Delete it and all history is gone forever                        │
-│     Your source files are just a working copy                        │
-│                                                                      │
-│  2. Every object = SHA-1 hash of (type + SP + length + \0 + content)│
-│     The full header is included — not just the content               │
-│     This is why git hash-object differs from shasum                  │
-│                                                                      │
-│  3. Objects stored at .git/objects/<first2>/<remaining38>            │
-│     Max folders: 256 (16 × 16). Each is a git repo's object store.  │
-│                                                                      │
-│  4. Blobs do NOT store filenames — trees do                          │
-│     Identical content = one blob, shared automatically               │
-│     Storage cost for a duplicate file = 0 bytes                      │
-│                                                                      │
-│  5. Three areas: working directory → staging area → repository       │
-│     Every file transition goes through staging — it cannot be skipped│
-│     git add = hash-object + update index                             │
-│     git commit = mktree + commit-tree + update HEAD                  │
-│                                                                      │
-│  6. Author ≠ Committer                                               │
-│     Author = who wrote the change                                    │
-│     Committer = who applied it to this repo                          │
-│     They differ during rebase, cherry-pick, patch application        │
-│                                                                      │
-└──────────────────────────────────────────────────────────────────────┘
-```
+1. **`.git/` is the repository — your source files are just a working copy.** Deleting `.git/` permanently destroys all history with no recovery possible. Every other area (working directory, staging area) can be rebuilt from objects in `.git/objects/`; the reverse is not true.
+
+2. **Every Git object is SHA-1 of (type + space + length + null byte + content) — not SHA-1 of the content alone.** The header is mandatory and part of what makes `git hash-object` produce a different result than `shasum` on identical input. Reproduce any hash independently with `printf "blob N\0content\n" | shasum`.
+
+3. **Blobs do not store filenames — trees do.** This separation enables deduplication: two files with identical content share one blob object. The tree stores two entries pointing to the same hash. Storage cost for the duplicate is zero bytes.
+
+4. **The staging area is mandatory — nothing goes directly from repository to working directory or back.** Every file transition passes through `.git/index`. `git add` = hash-object + update index. `git commit` = mktree + commit-tree + update HEAD. Understanding this makes every staging-related error message self-explanatory.
+
+5. **Author and committer are different fields in a commit object.** They are identical for commits made on your own machine, but diverge during rebase (committer = person rebasing), cherry-pick, and patch application via `git am`. Both fields are permanent parts of the commit object and cannot be changed without rewriting history.
 
 ### Quick reference — commands used in this demo
 
@@ -1173,6 +1164,22 @@ Fix: `git cat-file --batch-all-objects --batch-check`
 
 ---
 
+## Interview Prep
+
+**Q1. You run `git hash-object --stdin` and `shasum` on the same input. They produce different hashes. A colleague says this means Git's hashing is broken. What is actually happening?**
+Git prepends an object header before hashing: `type SP length NUL content`. For a blob containing "Hello\n" (6 bytes), Git hashes `blob 6\0Hello\n` — not `Hello\n` alone. `shasum` hashes only the raw content. The inputs differ, so the outputs differ. This is by design: the header encodes the object type and size, making it impossible to confuse a blob, tree, or commit that happen to have identical raw bytes. Verify it yourself: `printf "blob 6\0Hello\n" | shasum` produces the same hash as `git hash-object --stdin`.
+
+**Q2. You `git add` two files with identical contents. A colleague says this wastes double the storage. Are they right?**
+No. Git is content-addressed. Both `git add` calls compute the same SHA-1 hash — same content, same header, same hash — and the second call finds the object already in `.git/objects/` and writes nothing. The tree stores two entries with two different filenames both pointing to the same blob hash. Storage cost for the second file is zero bytes. This deduplication is automatic and applies to any number of identical files.
+
+**Q3. A developer says `git add` just "copies files to a staging area." What is more precise?**
+`git add` does two things: it calls `git hash-object -w` to create a blob object in `.git/objects/` (the actual content storage), and it updates `.git/index` (the staging area) with an entry mapping the filename and permissions to that blob's hash. The file is compressed with zlib and stored by hash at this point — not at commit time. `git commit` then calls `git mktree` to create tree objects from the index and `git commit-tree` to wrap the root tree in a commit object.
+
+**Q4. You run `git read-tree <hash>` but the files do not appear in your working directory. What is happening and what is the next step?**
+`git read-tree` loads the tree into the staging area (`.git/index`) only — it does not touch the working directory. This is by design: the staging area and working directory are separate areas. To write the staged files to disk, run `git checkout-index -a`. The `-a` flag writes all staged entries. This two-step plumbing sequence is what the porcelain `git checkout <branch>` does internally in one command.
+
+---
+
 ## What's Next
 
 **Demo 03 — SHA-1 & Object Storage Deep Dive**
@@ -1234,7 +1241,7 @@ Fix: `git cat-file --batch-all-objects --batch-check`
 
 **02-git-internals-object-model-quiz.md:**
 
-```
+````
 # Quiz — Demo 02: Git Internals: The Object Model
 
 > One correct answer per question unless stated otherwise.
@@ -1364,5 +1371,5 @@ Score guide:
 | 4/5 | Review the wrong answer, then proceed |
 | 3/5 | Re-read the relevant README section, retry quiz |
 | Below 3/5 | Re-read Demo 02 and redo the walkthrough before proceeding |
-```
+````
 
