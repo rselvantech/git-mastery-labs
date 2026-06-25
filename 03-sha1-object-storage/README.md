@@ -986,7 +986,7 @@ Delta compression stores one full "base" object and represents similar objects a
 **03-sha1-object-storage-anki.csv:**
 
 ```
-#deck:git-mastery-labs::Section 1 - Foundations::03-sha1-object-storage
+#deck:git-mastery-labs::Section 1 - Git Foundations & Internals::03-sha1-object-storage
 #separator:Comma
 #columns:Front,Back,Tags
 "You want to reproduce the SHA-1 hash Git produces for a file containing 'Hello, git\n' (11 bytes). What exact command?","printf 'blob 11\0Hello, git\n' | shasum — Git prepends the header (type SP length NUL) before hashing. shasum on raw content alone gives a different result.","demo03 sha1 internals"

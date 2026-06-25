@@ -860,7 +860,7 @@ In a shared build server or CI environment, a system-level config (`/etc/gitconf
 **01-git-github-introduction-anki.csv:**
 
 ```
-#deck:git-mastery-labs::Section 1 - Foundations::01-git-github-introduction
+#deck:git-mastery-labs::Section 1 - Git Foundations & Internals::01-git-github-introduction
 #separator:Comma
 #columns:Front,Back,Tags
 "You are on a flight with no internet. You need to commit 3 changes and read 50 commits of history. Can Git do this — and why?","Yes — completely. Git stores every commit, every file version, and all history inside .git/ on your local machine. Internet is only required to push to or pull from a remote like GitHub. Both operations are fully local.","demo01 fundamentals offline distributed"

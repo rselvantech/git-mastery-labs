@@ -1215,7 +1215,7 @@ No. Git is content-addressed. Both `git add` calls compute the same SHA-1 hash �
 **02-git-internals-object-model-anki.csv:**
 
 ```
-#deck:git-mastery-labs::Section 1 - Foundations::02-git-internals-object-model
+#deck:git-mastery-labs::Section 1 - Git Foundations & Internals::02-git-internals-object-model
 #separator:Comma
 #columns:Front,Back,Tags
 "After running 'echo Hello, git | git hash-object --stdin -w' twice, you check the working directory with ls -la. No files appear — only .git/. Yet git cat-file --batch-all-objects --batch-check shows two blobs. How is this possible?","Git's object database (.git/objects/) is completely independent from the working directory. git hash-object -w writes directly to the object database — it does not create any file on disk. Objects can exist in the database without any corresponding file in the working directory.","demo02 internals independence working-dir"
